@@ -6,8 +6,11 @@ const bcrypt = require("bcrypt");
 
 var MongoDBStore = require("connect-mongodb-session")(session);
 
+const dotenv = require("dotenv");
+dotenv.config();
+
 var dbStore = new MongoDBStore({
-  uri: "mongodb://127.0.0.1:27017/connect_mongodb_session_test",
+  uri: `mongodb+srv://${process.env.ATLAS_DB_USER}:${process.env.ATLAS_DB_PASSWORD}@cluster0.yzanekj.mongodb.net/comp2537w1?retryWrites=true&w=majority`,
   collection: "mySessions",
 });
 
