@@ -23,7 +23,7 @@ const mongodb_session_secret = process.env.MONGODB_SESSION_SECRET;
 const node_session_secret = process.env.NODE_SESSION_SECRET;
 
 var dbStore = new MongoDBStore({
-  uri: `mongodb+srv://${atlas_db_user}:${atlas_db_password}@${mongodb_host}.yzanekj.mongodb.net/${mongodb_database}?retryWrites=true&w=majority`,
+  uri: `mongodb+srv://${atlas_db_user}:${atlas_db_password}@${mongodb_host}/${mongodb_database}?retryWrites=true&w=majority`,
   crypto: {
     secret: mongodb_session_secret,
   },
