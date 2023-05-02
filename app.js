@@ -4,6 +4,7 @@ const express = require("express");
 const session = require("express-session");
 const bcrypt = require("bcrypt");
 const Joi = require("joi");
+const { connectDatabase } = require("./databaseConnection");
 const app = express();
 const expireTime = 60 * 60 * 1000;
 const saltRounds = 12;
@@ -11,8 +12,9 @@ const saltRounds = 12;
 var MongoDBStore = require("connect-mongodb-session")(session);
 
 // database
-const userCollection = database.db(mongodb_database).collection("users");
-var { database } = include("databaseConnection");
+const client = await connectDatabase();
+const database = client.db("myDatabase");
+const userCollection = database.collection("users");
 
 // secrets
 const mongodb_host = process.env.MONGODB_HOST;
@@ -23,7 +25,7 @@ const mongodb_session_secret = process.env.MONGODB_SESSION_SECRET;
 const node_session_secret = process.env.NODE_SESSION_SECRET;
 
 var dbStore = new MongoDBStore({
-  uri: `mongodb+srv://${atlas_db_user}:${atlas_db_password}@${mongodb_host}/${mongodb_database}?retryWrites=true&w=majority`,
+  uri: `mongodb+srv://${atlas_db_user}:${atlas_db_password}@${mongodb_host}.yzanekj.mongodb.net/${mongodb_database}?retryWrites=true&w=majority`,
   crypto: {
     secret: mongodb_session_secret,
   },
