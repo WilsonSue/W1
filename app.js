@@ -4,6 +4,10 @@ const express = require("express");
 const session = require("express-session");
 const bcrypt = require("bcrypt");
 const Joi = require("joi");
+<<<<<<< HEAD
+=======
+const { connectDatabase } = require("./databaseConnection");
+>>>>>>> 660bc2939181928fc4045a90ea7f7ffd21b7732e
 const app = express();
 const expireTime = 60 * 60 * 1000;
 const saltRounds = 12;
@@ -11,8 +15,14 @@ const saltRounds = 12;
 var MongoDBStore = require("connect-mongodb-session")(session);
 
 // database
+<<<<<<< HEAD
 var { database } = include("databaseConnection");
 const userCollection = database.db(mongodb_database).collection("users");
+=======
+const client = await connectDatabase();
+const database = client.db("myDatabase");
+const userCollection = database.collection("users");
+>>>>>>> 660bc2939181928fc4045a90ea7f7ffd21b7732e
 
 // secrets
 const mongodb_host = process.env.MONGODB_HOST;
