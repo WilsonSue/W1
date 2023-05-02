@@ -1,15 +1,16 @@
 require("./utils.js");
 require("dotenv").config();
-const app = express();
 const express = require("express");
 const session = require("express-session");
 const bcrypt = require("bcrypt");
 const Joi = require("joi");
+const app = express();
 const expireTime = 60 * 60 * 1000;
 const saltRounds = 12;
 
 var MongoDBStore = require("connect-mongodb-session")(session);
 
+// database
 var { database } = include("databaseConnection");
 const userCollection = database.db(mongodb_database).collection("users");
 
