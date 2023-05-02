@@ -12,14 +12,8 @@ const saltRounds = 12;
 var MongoDBStore = require("connect-mongodb-session")(session);
 
 // database
-<<<<<<< HEAD
 var { database } = include("databaseConnection");
 const userCollection = database.db(mongodb_database).collection("users");
-=======
-const client = await connectDatabase();
-const database = client.db("myDatabase");
-const userCollection = database.collection("users");
->>>>>>> 660bc2939181928fc4045a90ea7f7ffd21b7732e
 
 // secrets
 const mongodb_host = process.env.MONGODB_HOST;
