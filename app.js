@@ -2,18 +2,15 @@ require("./utils.js");
 require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
+const MongoStore = require("connect-mongo");
 const bcrypt = require("bcrypt");
 const Joi = require("joi");
-const { connectDatabase } = require("./databaseConnection");
 const app = express();
 const expireTime = 60 * 60 * 1000;
 const saltRounds = 12;
+const port = process.env.PORT || 4000;
 
 var MongoDBStore = require("connect-mongodb-session")(session);
-
-// database
-var { database } = include("databaseConnection");
-const userCollection = database.db(mongodb_database).collection("users");
 
 // secrets
 const mongodb_host = process.env.MONGODB_HOST;
@@ -23,8 +20,14 @@ const mongodb_database = process.env.MONGODB_DATABASE;
 const mongodb_session_secret = process.env.MONGODB_SESSION_SECRET;
 const node_session_secret = process.env.NODE_SESSION_SECRET;
 
-var dbStore = new MongoDBStore({
-  uri: `mongodb+srv://${atlas_db_user}:${atlas_db_password}@${mongodb_host}.yzanekj.mongodb.net/${mongodb_database}?retryWrites=true&w=majority`,
+// database
+var { database } = include("databaseConnection");
+const userCollection = database.db(mongodb_database).collection("users");
+
+app.use(express.urlencoded({ extended: false }));
+
+var mongoStore = MongoStore.create({
+  mongoUrl: `mongodb+srv://${atlas_db_user}:${atlas_db_password}@${mongodb_host}/${mongodb_database}?retryWrites=true&w=majority`,
   crypto: {
     secret: mongodb_session_secret,
   },
@@ -34,9 +37,9 @@ var dbStore = new MongoDBStore({
 app.use(
   session({
     secret: node_session_secret,
-    store: dbStore,
-    resave: true,
+    store: mongoStore,
     saveUninitialized: false,
+    resave: true,
   })
 );
 
@@ -68,6 +71,7 @@ app.get("/members", (req, res) => {
   if (req.session.authenticated) {
     const randomImageNumber = Math.floor(Math.random() * 3) + 1;
     const imageName = `00${randomImageNumber}.jpg`;
+    const username = req.session.username;
     HTMLResponse = `
   <h2>Hello, ${username}!</h2>
   <br>
@@ -95,20 +99,7 @@ app.get("/signup", (req, res) => {
   res.send(html);
 });
 
-app.get("/signupSubmit", (req, res) => {
-  var missingInput = req.query.missing;
-  var html = "";
-  if (missingInput == 1) {
-    html = "<br>Email is required<br><a href='/signup'>Try again</a>";
-  } else if (missingInput == 2) {
-    html = "<br>Username is required<br><a href='/signup'>Try again</a>";
-  } else if (missingInput == 3) {
-    html = "<br>Password is required<br><a href='/signup'>Try again</a>";
-  }
-  res.send(html);
-});
-
-pp.post("/submitUser", async (req, res) => {
+app.post("/submitUser", async (req, res) => {
   var username = req.body.username;
   var password = req.body.password;
   var email = req.body.email;
@@ -147,6 +138,19 @@ pp.post("/submitUser", async (req, res) => {
   res.redirect("/members");
 });
 
+app.get("/signupSubmit", (req, res) => {
+  var missingInput = req.query.missing;
+  var html = "";
+  if (missingInput == 1) {
+    html = "<br>Email is required<br><a href='/signup'>Try again</a>";
+  } else if (missingInput == 2) {
+    html = "<br>Username is required<br><a href='/signup'>Try again</a>";
+  } else if (missingInput == 3) {
+    html = "<br>Password is required<br><a href='/signup'>Try again</a>";
+  }
+  res.send(html);
+});
+
 app.get("/login", (req, res) => {
   var html = `
   log in
@@ -157,6 +161,26 @@ app.get("/login", (req, res) => {
   </form>
   `;
   res.send(html);
+});
+
+app.post("/login", async (req, res) => {
+  // set a global variable to true if the user is authenticated
+  try {
+    const result = await usersModel.findOne({
+      username: req.body.username,
+    });
+
+    if (bcrypt.compareSync(req.body.password, result.password)) {
+      req.session.GLOBAL_AUTHENTICATED = true;
+      req.session.loggedUsername = req.body.username;
+      req.session.loggedPassword = req.body.password;
+      res.redirect("/");
+    } else {
+      res.send("invalid password");
+    }
+  } catch (error) {
+    console.log(error);
+  }
 });
 
 app.post("/loginSubmit", async (req, res) => {
@@ -193,30 +217,6 @@ app.post("/loginSubmit", async (req, res) => {
       "Invalid email/password combination<br><br><a href='/login'>Try again</a>"
     );
     return;
-  }
-});
-
-// GLOBAL_AUTHENTICATED = false;
-app.use(express.urlencoded({ extended: false }));
-// built-in middleware function in Express. It parses incoming requests with urlencoded payloads and is based on body-parser.
-
-app.post("/login", async (req, res) => {
-  // set a global variable to true if the user is authenticated
-  try {
-    const result = await usersModel.findOne({
-      username: req.body.username,
-    });
-
-    if (bcrypt.compareSync(req.body.password, result.password)) {
-      req.session.GLOBAL_AUTHENTICATED = true;
-      req.session.loggedUsername = req.body.username;
-      req.session.loggedPassword = req.body.password;
-      res.redirect("/");
-    } else {
-      res.send("invalid password");
-    }
-  } catch (error) {
-    console.log(error);
   }
 });
 
