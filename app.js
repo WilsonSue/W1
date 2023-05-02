@@ -1,42 +1,200 @@
+require("./utils.js");
+require("dotenv").config();
 const express = require("express");
-const app = express();
 const session = require("express-session");
-const usersModel = require("./models/w1users");
 const bcrypt = require("bcrypt");
+const Joi = require("joi");
+const { connectDatabase } = require("./databaseConnection");
+const app = express();
+const expireTime = 60 * 60 * 1000;
+const saltRounds = 12;
 
 var MongoDBStore = require("connect-mongodb-session")(session);
 
-const dotenv = require("dotenv");
-dotenv.config();
+// database
+const client = await connectDatabase();
+const database = client.db("myDatabase");
+const userCollection = database.collection("users");
+
+// secrets
+const mongodb_host = process.env.MONGODB_HOST;
+const atlas_db_user = process.env.ATLAS_DB_USER;
+const atlas_db_password = process.env.ATLAS_DB_PASSWORD;
+const mongodb_database = process.env.MONGODB_DATABASE;
+const mongodb_session_secret = process.env.MONGODB_SESSION_SECRET;
+const node_session_secret = process.env.NODE_SESSION_SECRET;
 
 var dbStore = new MongoDBStore({
-  uri: `mongodb+srv://${process.env.ATLAS_DB_USER}:${process.env.ATLAS_DB_PASSWORD}@cluster0.yzanekj.mongodb.net/comp2537w1?retryWrites=true&w=majority`,
-  collection: "mySessions",
+  uri: `mongodb+srv://${atlas_db_user}:${atlas_db_password}@${mongodb_host}.yzanekj.mongodb.net/${mongodb_database}?retryWrites=true&w=majority`,
+  crypto: {
+    secret: mongodb_session_secret,
+  },
 });
 
 // replace the in-memory array session store with a database session store
 app.use(
   session({
-    secret: "the secret is sky color is blue ", // bad secret
+    secret: node_session_secret,
     store: dbStore,
-    resave: false,
+    resave: true,
     saveUninitialized: false,
   })
 );
 
 // public routes
 app.get("/", (req, res) => {
-  res.send("<h1> Hello World </h1>");
+  if (!req.session.authenticated) {
+    var noLoginHomePage = `
+    <h1>Home Page</h1>
+    <button><a href='/login' style="text-decoration:none" >Login</a></button>
+    <button><a href='/signup' style="text-decoration:none">Signup</a></button>
+    `;
+    res.send(noLoginHomePage);
+    return;
+  } else {
+    var username = req.session.username;
+    var loggedinHomePage = `
+    Hello, ${username}!<br>
+    <button><a href='/members' style="text-decoration:none" >Go to Members Area</a></button><br>
+    <button><a href='/logout' style="text-decoration:none" >Logout</a></button>
+    `;
+    res.send(loggedinHomePage);
+    return;
+  }
+});
+
+app.use(express.static(__dirname + "/public"));
+
+app.get("/members", (req, res) => {
+  if (req.session.authenticated) {
+    const randomImageNumber = Math.floor(Math.random() * 3) + 1;
+    const imageName = `00${randomImageNumber}.jpg`;
+    HTMLResponse = `
+  <h2>Hello, ${username}!</h2>
+  <br>
+  <div><img src="${imageName}" /><div>
+  <br><button><a href='/logout' style="text-decoration:none" >Sign out</a></button>
+  `;
+    res.send(HTMLResponse);
+    return;
+  } else {
+    res.redirect("/");
+    return;
+  }
+});
+
+app.get("/signup", (req, res) => {
+  var html = `
+  create user
+  <form action='/submitUser' method='POST'>
+    <input name='username' type='text' placeholder='name'><br>
+    <input name='email' type='text' placeholder='email'><br>
+    <input name='password' type='password' placeholder='password'><br>
+    <button>Submit</button>
+  </form>
+  `;
+  res.send(html);
+});
+
+app.get("/signupSubmit", (req, res) => {
+  var missingInput = req.query.missing;
+  var html = "";
+  if (missingInput == 1) {
+    html = "<br>Email is required<br><a href='/signup'>Try again</a>";
+  } else if (missingInput == 2) {
+    html = "<br>Username is required<br><a href='/signup'>Try again</a>";
+  } else if (missingInput == 3) {
+    html = "<br>Password is required<br><a href='/signup'>Try again</a>";
+  }
+  res.send(html);
+});
+
+pp.post("/submitUser", async (req, res) => {
+  var username = req.body.username;
+  var password = req.body.password;
+  var email = req.body.email;
+  const schema = Joi.object({
+    username: Joi.string().alphanum().max(20).required(),
+    password: Joi.string().max(20).required(),
+    email: Joi.string().email().required(),
+  });
+  if (!email) {
+    res.redirect("/signupSubmit?missing=1");
+    return;
+  }
+  if (!username) {
+    res.redirect("/signupSubmit?missing=2");
+    return;
+  }
+  if (!password) {
+    res.redirect("/signupSubmit?missing=3");
+    return;
+  }
+  const validationResult = schema.validate({ username, password, email });
+  if (validationResult.error != null) {
+    console.log(validationResult.error);
+    res.redirect("/signup");
+    return;
+  }
+  var hashedPassword = await bcrypt.hash(password, saltRounds);
+  await userCollection.insertOne({
+    username: username,
+    password: hashedPassword,
+    email: email,
+  });
+  req.session.username = username;
+  console.log("Inserted user");
+  req.session.authenticated = true;
+  res.redirect("/members");
 });
 
 app.get("/login", (req, res) => {
-  res.send(`
-    <form action="/login" method="post">
-      <input type="text" name="username" placeholder="Enter your username" />
-      <input type="password" name="password" placeholder="Enter your password" />
-      <input type="submit" value="Login" />
-    </form>
-  `);
+  var html = `
+  log in
+  <form action='/loginSubmit' method='POST'>
+    <input name='email' type='text' placeholder='email'><br>
+    <input name='password' type='password' placeholder='password'><br>
+    <button>Submit</button>
+  </form>
+  `;
+  res.send(html);
+});
+
+app.post("/loginSubmit", async (req, res) => {
+  var password = req.body.password;
+  var email = req.body.email;
+  const schema = Joi.string().email().required();
+  const validationResult = schema.validate(email);
+  if (validationResult.error != null) {
+    console.log(validationResult.error);
+    res.redirect("/login");
+    return;
+  }
+  const result = await userCollection
+    .find({ email: email })
+    .project({ email: 1, password: 1, username: 1, _id: 1 })
+    .toArray();
+  console.log(result);
+  if (result.length != 1) {
+    console.log("user not found");
+    res.redirect("/login");
+    return;
+  }
+  if (await bcrypt.compare(password, result[0].password)) {
+    console.log("correct password");
+    console.log(result[0].username);
+    req.session.authenticated = true;
+    req.session.username = result[0].username;
+    req.session.cookie.maxAge = expireTime;
+    res.redirect("/members");
+    return;
+  } else {
+    console.log("incorrect password");
+    res.send(
+      "Invalid email/password combination<br><br><a href='/login'>Try again</a>"
+    );
+    return;
+  }
 });
 
 // GLOBAL_AUTHENTICATED = false;
@@ -63,50 +221,21 @@ app.post("/login", async (req, res) => {
   }
 });
 
-// only for authenticated users
-const authenticatedOnly = (req, res, next) => {
-  if (!req.session.GLOBAL_AUTHENTICATED) {
-    return res.status(401).json({ error: "not authenticated" });
-  }
-  next(); // allow the next route to run
-};
-app.use(authenticatedOnly);
-
-app.use(express.static("public"));
-
-app.get("/protectedRoute", (req, res) => {
-  const randomImageNumber = Math.floor(Math.random() * 3) + 1;
-  const imageName = `00${randomImageNumber}.jpg`;
-  HTMLResponse = `
-  <h1> Protected Route </h1> 
-  <br>
-  <img src="${imageName}" />
-  `;
-  res.send(HTMLResponse);
+app.get("/logout", (req, res) => {
+  req.session.destroy();
+  res.redirect("/");
 });
 
-// only for admins
-const protectedRouteForAdminsOnlyMiddlewareFunction = async (
-  req,
-  res,
-  next
-) => {
-  try {
-    const result = await usersModel.findOne({
-      username: req.session.loggedUsername,
-    });
-    if (result?.type != "administrator") {
-      return res.send("<h1> You are not an admin </h1>");
-    }
-    next(); // allow the next route to run
-  } catch (error) {
-    console.log(error);
-  }
-};
-app.use(protectedRouteForAdminsOnlyMiddlewareFunction);
+// ---------------404 page-------------------
+// If the user tries to access a page that doesn't exist,
+// send back an appropriate message saying that the page was not found.
+app.get("*", (req, res) => {
+  res.status(404);
+  res.send("Page not found - 404");
+});
 
-app.get("/protectedRouteForAdminsOnly", (req, res) => {
-  res.send("<h1> protectedRouteForAdminsOnly </h1>");
+app.listen(port, () => {
+  console.log("Node application listening on port" + port);
 });
 
 module.exports = app;
