@@ -4,10 +4,7 @@ const express = require("express");
 const session = require("express-session");
 const bcrypt = require("bcrypt");
 const Joi = require("joi");
-<<<<<<< HEAD
-=======
 const { connectDatabase } = require("./databaseConnection");
->>>>>>> 660bc2939181928fc4045a90ea7f7ffd21b7732e
 const app = express();
 const expireTime = 60 * 60 * 1000;
 const saltRounds = 12;
