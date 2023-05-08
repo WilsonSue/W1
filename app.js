@@ -4,13 +4,14 @@ const express = require("express");
 const session = require("express-session");
 const MongoStore = require("connect-mongo");
 const bcrypt = require("bcrypt");
+const { MongoClient, ObjectId } = require("mongodb");
 const Joi = require("joi");
 const app = express();
 const expireTime = 60 * 60 * 1000;
 const saltRounds = 12;
 const port = process.env.PORT || 4000;
 
-var MongoDBStore = require("connect-mongodb-session")(session);
+app.set("view engine", "ejs");
 
 // secrets
 const mongodb_host = process.env.MONGODB_HOST;
@@ -45,41 +46,17 @@ app.use(
 
 // public routes
 app.get("/", (req, res) => {
-  if (!req.session.authenticated) {
-    var noLoginHomePage = `
-    <h1>Home Page</h1>
-    <button><a href='/login' style="text-decoration:none" >Login</a></button>
-    <button><a href='/signup' style="text-decoration:none">Signup</a></button>
-    `;
-    res.send(noLoginHomePage);
-    return;
-  } else {
-    var username = req.session.username;
-    var loggedinHomePage = `
-    Hello, ${username}!<br>
-    <button><a href='/members' style="text-decoration:none" >Go to Members Area</a></button><br>
-    <button><a href='/logout' style="text-decoration:none" >Logout</a></button>
-    `;
-    res.send(loggedinHomePage);
-    return;
-  }
+  const authenticated = req.session.authenticated;
+  const username = req.session.username;
+  res.render("app", { authenticated, username });
 });
 
 app.use(express.static(__dirname + "/public"));
 
 app.get("/members", (req, res) => {
   if (req.session.authenticated) {
-    const randomImageNumber = Math.floor(Math.random() * 3) + 1;
-    const imageName = `00${randomImageNumber}.jpg`;
     const username = req.session.username;
-    HTMLResponse = `
-  <h2>Hello, ${username}!</h2>
-  <br>
-  <div><img src="${imageName}" /><div>
-  <br><button><a href='/logout' style="text-decoration:none" >Sign out</a></button>
-  `;
-    res.send(HTMLResponse);
-    return;
+    res.render("members", { username });
   } else {
     res.redirect("/");
     return;
@@ -87,16 +64,7 @@ app.get("/members", (req, res) => {
 });
 
 app.get("/signup", (req, res) => {
-  var html = `
-  create user
-  <form action='/submitUser' method='POST'>
-    <input name='username' type='text' placeholder='name'><br>
-    <input name='email' type='text' placeholder='email'><br>
-    <input name='password' type='password' placeholder='password'><br>
-    <button>Submit</button>
-  </form>
-  `;
-  res.send(html);
+  res.render("signup");
 });
 
 app.post("/submitUser", async (req, res) => {
@@ -139,32 +107,23 @@ app.post("/submitUser", async (req, res) => {
 });
 
 app.get("/signupSubmit", (req, res) => {
-  var missingInput = req.query.missing;
-  var html = "";
-  if (missingInput == 1) {
-    html = "<br>Email is required<br><a href='/signup'>Try again</a>";
-  } else if (missingInput == 2) {
-    html = "<br>Username is required<br><a href='/signup'>Try again</a>";
-  } else if (missingInput == 3) {
-    html = "<br>Password is required<br><a href='/signup'>Try again</a>";
-  }
-  res.send(html);
+  const missingInput = req.query.missing;
+  const errorMessages = {
+    1: "Email is required",
+    2: "Username is required",
+    3: "Password is required",
+  };
+
+  res.render("signupSubmit", { missingInput, errorMessages });
 });
 
 app.get("/login", (req, res) => {
-  var html = `
-  log in
-  <form action='/loginSubmit' method='POST'>
-    <input name='email' type='text' placeholder='email'><br>
-    <input name='password' type='password' placeholder='password'><br>
-    <button>Submit</button>
-  </form>
-  `;
-  res.send(html);
+  res.render("login", { errorMessage: null });
 });
 
 app.post("/login", async (req, res) => {
-  // set a global variable to true if the user is authenticated
+  let errorMessage = null;
+
   try {
     const result = await usersModel.findOne({
       username: req.body.username,
@@ -175,12 +134,16 @@ app.post("/login", async (req, res) => {
       req.session.loggedUsername = req.body.username;
       req.session.loggedPassword = req.body.password;
       res.redirect("/");
+      return;
     } else {
-      res.send("invalid password");
+      errorMessage = "Invalid password.";
     }
   } catch (error) {
     console.log(error);
+    errorMessage = "An error occurred.";
   }
+
+  res.render("loginSubmit", { errorMessage: errorMessage });
 });
 
 app.post("/loginSubmit", async (req, res) => {
@@ -188,36 +151,59 @@ app.post("/loginSubmit", async (req, res) => {
   var email = req.body.email;
   const schema = Joi.string().email().required();
   const validationResult = schema.validate(email);
+  let errorMessage = null;
+
   if (validationResult.error != null) {
-    console.log(validationResult.error);
-    res.redirect("/login");
-    return;
-  }
-  const result = await userCollection
-    .find({ email: email })
-    .project({ email: 1, password: 1, username: 1, _id: 1 })
-    .toArray();
-  console.log(result);
-  if (result.length != 1) {
-    console.log("user not found");
-    res.redirect("/login");
-    return;
-  }
-  if (await bcrypt.compare(password, result[0].password)) {
-    console.log("correct password");
-    console.log(result[0].username);
-    req.session.authenticated = true;
-    req.session.username = result[0].username;
-    req.session.cookie.maxAge = expireTime;
-    res.redirect("/members");
-    return;
+    errorMessage = "Invalid email format.";
   } else {
-    console.log("incorrect password");
-    res.send(
-      "Invalid email/password combination<br><br><a href='/login'>Try again</a>"
-    );
+    const result = await userCollection
+      .find({ email: email })
+      .project({ email: 1, password: 1, username: 1, _id: 1, role: 1 })
+      .toArray();
+
+    if (result.length != 1) {
+      errorMessage = "User not found.";
+    } else {
+      if (await bcrypt.compare(password, result[0].password)) {
+        req.session.authenticated = true;
+        req.session.username = result[0].username;
+        req.session.role = result[0].role; // Store the user's role in the session
+        req.session.cookie.maxAge = expireTime;
+        res.redirect("/members");
+        return;
+      } else {
+        errorMessage = "Invalid email/password combination.";
+      }
+    }
+  }
+
+  res.render("login", { errorMessage: errorMessage });
+});
+
+app.get("/admin", async (req, res) => {
+  console.log("Authenticated:", req.session.authenticated); // Debug output
+  console.log("Role:", req.session.role); // Debug output
+
+  if (!req.session.authenticated || req.session.role !== "admin") {
+    res.render("notAdmin");
     return;
   }
+
+  const users = await userCollection.find({}).toArray();
+  res.render("admin", { users });
+});
+
+app.get("/notAdmin", (req, res) => {
+  res.render("notAdmin");
+});
+
+app.post("/updateRole", async (req, res) => {
+  const { userId, role } = req.body;
+  await userCollection.updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { role: role } }
+  );
+  res.redirect("/admin");
 });
 
 app.get("/logout", (req, res) => {
@@ -225,12 +211,9 @@ app.get("/logout", (req, res) => {
   res.redirect("/");
 });
 
-// ---------------404 page-------------------
-// If the user tries to access a page that doesn't exist,
-// send back an appropriate message saying that the page was not found.
 app.get("*", (req, res) => {
   res.status(404);
-  res.send("Page not found - 404");
+  res.render("404");
 });
 
 app.listen(port, () => {

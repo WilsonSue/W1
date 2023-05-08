@@ -1,0 +1,13 @@
+<%- include("templates/header") %>
+<div class="text-center">
+<% if (!authenticated) { %>
+    <h1>Home Page</h1>
+    <button><a href='/login' style="text-decoration:none">Login</a></button>
+    <button><a href='/signup' style="text-decoration:none">Signup</a></button>
+    <% } else { %>
+        Hello, <%= username %>!<br>
+            <button><a href='/members' style="text-decoration:none">Go to Members Area</a></button><br>
+            <button><a href='/logout' style="text-decoration:none">Logout</a></button>
+            <% } %>
+</div>
+<%- include("templates/footer") %>

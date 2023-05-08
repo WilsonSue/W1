@@ -1,0 +1,8 @@
+<%- include("templates/header") %>
+<% if (missingInput) { %>
+    <div class="text-center">
+        <%= errorMessages[missingInput] %><br>
+            <a href='/signup'>Try again</a>
+    </div>
+    <% } %>
+<%- include("templates/footer") %>

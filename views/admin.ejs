@@ -1,0 +1,43 @@
+<%- include("templates/header") %>
+    <h1>Users List</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <% users.forEach(user=> { %>
+                <tr>
+                    <td>
+                        <%= user.username %>
+                    </td>
+                    <td>
+                        <%= user.email %>
+                    </td>
+                    <td>
+                        <%= user.role ? user.role : "user" %>
+                    </td>
+                    <td>
+                        <% if (user.role !=="admin" ) { %>
+                            <form action="/updateRole" method="POST">
+                                <input type="hidden" name="userId" value="<%= user._id %>">
+                                <input type="hidden" name="role" value="admin">
+                                <button type="submit" class="btn btn-primary">Promote to Admin</button>
+                            </form>
+                            <% } else { %>
+                                <form action="/updateRole" method="POST">
+                                    <input type="hidden" name="userId" value="<%= user._id %>">
+                                    <input type="hidden" name="role" value="user">
+                                    <button type="submit" class="btn btn-secondary">Demote to User</button>
+                                </form>
+                                <% } %>
+                    </td>
+                </tr>
+                <% }) %>
+        </tbody>
+    </table>
+    <%- include("templates/footer") %>
